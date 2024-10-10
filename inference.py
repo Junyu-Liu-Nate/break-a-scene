@@ -51,8 +51,10 @@ class BreakASceneInference:
 
     @torch.no_grad()
     def infer_and_save(self, prompts):
-        images = self.pipeline(prompts).images
-        images[0].save(self.args.output_path)
+        for i in range(5):
+            images = self.pipeline(prompts).images
+            save_path = self.args.output_path.replace(".jpg", f"_{i}.jpg")
+            images[0].save(save_path)
 
 
 if __name__ == "__main__":

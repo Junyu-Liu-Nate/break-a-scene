@@ -1,0 +1,7 @@
+python inference.py   --model_path "outputs/creature"   --prompt "a photo of a <asset0> on the beach"   --output_path "outputs/creature_inference/asset0.jpg"
+python inference.py   --model_path "outputs/creature"   --prompt "a photo of a <asset1> on the beach"   --output_path "outputs/creature_inference/asset1.jpg"
+python inference.py   --model_path "outputs/creature"   --prompt "a photo of a <asset2> on the beach"   --output_path "outputs/creature_inference/asset2.jpg"
+python inference.py   --model_path "outputs/creature"   --prompt "a photo of a <asset0> and <asset1> on the beach"   --output_path "outputs/creature_inference/asset0_asset1.jpg"
+python inference.py   --model_path "outputs/creature"   --prompt "a photo of a <asset0> and <asset2> on the beach"   --output_path "outputs/creature_inference/asset0_asset2.jpg"
+python inference.py   --model_path "outputs/creature"   --prompt "a photo of a <asset1> and <asset2> on the beach"   --output_path "outputs/creature_inference/asset1_asset2.jpg"
+python inference.py   --model_path "outputs/creature"   --prompt "a photo of a <asset0> and <asset1> and <asset2> on the beach"   --output_path "outputs/creature_inference/asset0_asset1_asset2.jpg"

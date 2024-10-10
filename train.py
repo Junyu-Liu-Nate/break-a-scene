@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import sys
+# sys.path.append('third_party/diffusers/src') ### Set specific local diffuser codebase
+sys.path.insert(0, '/oscar/data/dritchi1/ljunyu/code/concept/break-a-scene/third_party/diffusers-0.12.1-patch/src')
+
 import argparse
 import hashlib
 import itertools
@@ -56,6 +60,9 @@ from transformers import AutoTokenizer, PretrainedConfig
 import ptp_utils
 from ptp_utils import AttentionStore
 from diffusers.models.cross_attention import CrossAttention
+
+from diffusers.loaders import AttnProcsLayers
+from diffusers.models.cross_attention import LoRACrossAttnProcessor
 
 check_min_version("0.12.0")
 
@@ -751,6 +758,34 @@ class SpatialDreambooth:
             revision=self.args.revision,
         )
 
+        ########## Add LoRA config ##########
+        # We only train the additional adapter LoRA layers
+        self.vae.requires_grad_(False)
+        self.text_encoder.requires_grad_(False)
+        self.unet.requires_grad_(False)
+
+        lora_attn_procs = {}
+        for name in self.unet.attn_processors.keys():
+            cross_attention_dim = None if name.endswith("attn1.processor") else self.unet.config.cross_attention_dim
+            if name.startswith("mid_block"):
+                hidden_size = self.unet.config.block_out_channels[-1]
+            elif name.startswith("up_blocks"):
+                block_id = int(name[len("up_blocks.")])
+                hidden_size = list(reversed(self.unet.config.block_out_channels))[block_id]
+            elif name.startswith("down_blocks"):
+                block_id = int(name[len("down_blocks.")])
+                hidden_size = self.unet.config.block_out_channels[block_id]
+
+            lora_attn_procs[name] = LoRACrossAttnProcessor(
+                hidden_size=hidden_size, cross_attention_dim=cross_attention_dim, rank=4
+            )
+
+        self.unet.set_attn_processor(lora_attn_procs)
+        self.lora_layers = AttnProcsLayers(self.unet.attn_processors)
+
+        self.accelerator.register_for_checkpointing(self.lora_layers)
+        #####################################
+
         # Load the tokenizer
         if self.args.tokenizer_name:
             self.tokenizer = AutoTokenizer.from_pretrained(
@@ -874,7 +909,7 @@ class SpatialDreambooth:
             center_crop=self.args.center_crop,
             num_of_assets=self.args.num_of_assets,
         )
-
+        
         train_dataloader = torch.utils.data.DataLoader(
             train_dataset,
             batch_size=self.args.train_batch_size,
@@ -1044,20 +1079,35 @@ class SpatialDreambooth:
                 self.text_encoder.train()
             for step, batch in enumerate(train_dataloader):
                 if self.args.phase1_train_steps == global_step:
-                    self.unet.requires_grad_(True)
+                    # self.unet.requires_grad_(True)
+                    self.unet.requires_grad_(False)
                     if self.args.train_text_encoder:
                         self.text_encoder.requires_grad_(True)
-                    unet_params = self.unet.parameters()
 
+                    # unet_params = self.unet.parameters()
+
+                    # params_to_optimize = (
+                    #     itertools.chain(unet_params, self.text_encoder.parameters())
+                    #     if self.args.train_text_encoder
+                    #     else itertools.chain(
+                    #         unet_params,
+                    #         self.text_encoder.get_input_embeddings().parameters(),
+                    #     )
+                    # )
+                    # del optimizer
+
+                    ########## Set optimizer to update only LoRA from UNet ##########
                     params_to_optimize = (
-                        itertools.chain(unet_params, self.text_encoder.parameters())
+                        itertools.chain(self.lora_layers.parameters(), self.text_encoder.parameters())
                         if self.args.train_text_encoder
                         else itertools.chain(
-                            unet_params,
+                            self.lora_layers.parameters(),
                             self.text_encoder.get_input_embeddings().parameters(),
                         )
                     )
                     del optimizer
+                    #################################################
+
                     optimizer = optimizer_class(
                         params_to_optimize,
                         lr=self.args.learning_rate,
@@ -1076,8 +1126,11 @@ class SpatialDreambooth:
                         num_cycles=self.args.lr_num_cycles,
                         power=self.args.lr_power,
                     )
-                    optimizer, lr_scheduler = self.accelerator.prepare(
-                        optimizer, lr_scheduler
+                    # optimizer, lr_scheduler = self.accelerator.prepare(
+                    #     optimizer, lr_scheduler
+                    # )
+                    self.lora_layers, optimizer, lr_scheduler = self.accelerator.prepare(
+                        self.lora_layers, optimizer, lr_scheduler
                     )
 
                 logs = {}
@@ -1137,6 +1190,7 @@ class SpatialDreambooth:
                             f"Unknown prediction type {self.noise_scheduler.config.prediction_type}"
                         )
 
+                    # print(f'with_prior_preservation: {self.args.with_prior_preservation}')
                     if self.args.with_prior_preservation:
                         # Chunk the noise and model_pred into two parts and compute the loss on each part separately.
                         model_pred_prior, model_pred = torch.chunk(model_pred, 2, dim=0)
@@ -1194,12 +1248,17 @@ class SpatialDreambooth:
                                 select=batch_idx,
                             )
                             curr_cond_batch_idx = self.args.train_batch_size + batch_idx
+                            
+                            # print(f'curr_cond_batch_idx: {curr_cond_batch_idx}')
+                            # print(f'len(GT_masks): {len(GT_masks)}')
+                            # print(f'batch["input_ids"]: {batch["input_ids"]}')
 
                             for mask_id in range(len(GT_masks)):
                                 curr_placeholder_token_id = self.placeholder_token_ids[
                                     batch["token_ids"][batch_idx][mask_id]
                                 ]
 
+                                # print(f'    curr_placeholder_token_id: {curr_placeholder_token_id}')
                                 asset_idx = (
                                     (
                                         batch["input_ids"][curr_cond_batch_idx]
@@ -1208,6 +1267,8 @@ class SpatialDreambooth:
                                     .nonzero()
                                     .item()
                                 )
+                                # print(f'    asset_idx: {asset_idx}')
+
                                 asset_attn_mask = agg_attn[..., asset_idx]
                                 asset_attn_mask = (
                                     asset_attn_mask / asset_attn_mask.max()
@@ -1231,12 +1292,23 @@ class SpatialDreambooth:
                     self.controller.cur_step = 0
 
                     if self.accelerator.sync_gradients:
+                        # params_to_clip = (
+                        #     itertools.chain(
+                        #         self.unet.parameters(), self.text_encoder.parameters()
+                        #     )
+                        #     if self.args.train_text_encoder
+                        #     else self.unet.parameters()
+                        # )
+                        # self.accelerator.clip_grad_norm_(
+                        #     params_to_clip, self.args.max_grad_norm
+                        # )
+
                         params_to_clip = (
                             itertools.chain(
-                                self.unet.parameters(), self.text_encoder.parameters()
+                                self.lora_layers.parameters(), self.text_encoder.parameters()
                             )
                             if self.args.train_text_encoder
-                            else self.unet.parameters()
+                            else self.lora_layers.parameters()
                         )
                         self.accelerator.clip_grad_norm_(
                             params_to_clip, self.args.max_grad_norm
@@ -1343,6 +1415,14 @@ class SpatialDreambooth:
                 revision=self.args.revision,
             )
             pipeline.save_pretrained(path)
+
+    # def save_pipeline(self, path):
+    #     self.accelerator.wait_for_everyone()
+    #     if self.accelerator.is_main_process:
+    #         lora_weights = {name: param for name, param in self.pipeline.unet.named_parameters() if 'lora' in name}
+    #         lora_weights_path = os.path.join(path, 'lora_weights.pth')
+    #         torch.save(lora_weights, lora_weights_path)
+    #         logger.info(f"Saved LoRA parameters to {lora_weights_path}")
 
     def register_attention_control(self, controller):
         attn_procs = {}
@@ -1473,9 +1553,10 @@ class SpatialDreambooth:
         vis = ptp_utils.view_images(np.stack(images, axis=0))
         vis.save(path)
 
-class P2PCrossAttnProcessor:
+class P2PCrossAttnProcessor(torch.nn.Module):
     def __init__(self, controller, place_in_unet):
-        super().__init__()
+        # super().__init__()
+        super(P2PCrossAttnProcessor, self).__init__()
         self.controller = controller
         self.place_in_unet = place_in_unet
 
