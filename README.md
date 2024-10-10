@@ -68,6 +68,17 @@ python train.py \
   --phase2_train_steps 400 \
   --output_dir outputs/creature
 ```
+For muliple images
+```bash
+python train_multi.py \
+  --instance_data_dir examples/creature_toys  \
+  --assets_indices_lists "0,1,2;3,4,5" \
+  --initializer_tokens_list "'creature','bowl','stone';'toy','toy','toy'" \
+  --class_data_dir inputs/data_dir \
+  --phase1_train_steps 400 \
+  --phase2_train_steps 400 \
+  --output_dir outputs/creature_toys
+```
 
 ## Step 2 - Generating images
 After training, a new model will be saved in `OUTPUT_DIR` with an extended vocabulary that contains the additional concepts `<asset0>` ... `<assetN>` where `N = NUMBER_OF_CONCEPTS - 1`. For example, in the above case, there will be additional 3 tokens `<asset0>`, `<asset1>` and `<asset2>`.
