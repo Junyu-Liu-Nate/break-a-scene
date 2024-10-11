@@ -97,6 +97,7 @@ def import_model_class_from_model_name_or_path(
 
 
 def collate_fn(examples, with_prior_preservation=False):
+    assert len(examples) == 1 
     input_ids = [example["instance_prompt_ids"] for example in examples]
     pixel_values = [example["instance_images"] for example in examples]
     masks = [example["instance_masks"] for example in examples]
@@ -622,12 +623,12 @@ class SpatialDreambooth:
             if self.args.train_text_encoder:
                 self.text_encoder.train()
             for step, batch in enumerate(train_dataloader):
-                print(f"step {step}, batch content sizes:")
-                for key, value in batch.items():
-                    if isinstance(value, torch.Tensor):
-                        print(f"  {key} size: {value.size()}")
-                    else:
-                        print(f"  {key} type: {type(value)}")
+                # print(f"step {step}, batch content sizes:")
+                # for key, value in batch.items():
+                #     if isinstance(value, torch.Tensor):
+                #         print(f"  {key} size: {value.size()}")
+                #     else:
+                #         print(f"  {key} type: {type(value)}")
 
                 if self.args.phase1_train_steps == global_step:
                     # self.unet.requires_grad_(True)
@@ -809,7 +810,8 @@ class SpatialDreambooth:
                                     batch["token_ids"][batch_idx][mask_id]
                                 ]
 
-                                # print(f'    curr_placeholder_token_id: {curr_placeholder_token_id}')
+                                # print(f'    batch["input_ids"][curr_cond_batch_idx]: {batch["input_ids"][curr_cond_batch_idx]}')
+                                # print(f'    curr_placeholder_token_id: {curr_placeholder_token_id}\n')
                                 asset_idx = (
                                     (
                                         batch["input_ids"][curr_cond_batch_idx]

@@ -46,6 +46,10 @@ class DreamBoothMultiDataset(Dataset):
             raise ValueError(f"Instance {self.instance_data_root} images root doesn't exists.")
 
         self.placeholder_tokens = placeholder_tokens
+        self.all_placeholder_tokens = []
+        for tokens_list in self.placeholder_tokens:
+            for token in tokens_list:
+                self.all_placeholder_tokens.append(token)
 
         self.instances = []
         for folder in sorted(self.instance_data_root.iterdir()):
@@ -88,14 +92,37 @@ class DreamBoothMultiDataset(Dataset):
         # print(f'instance_image size: {instance_image.size()}')
         # print(f'instance_masks size: {instance_masks.size()}')
         
-        tokens_ids_to_use = random.sample(range(len(self.placeholder_tokens[index % len(self.placeholder_tokens)])), k=random.randrange(1, len(self.placeholder_tokens[index % len(self.placeholder_tokens)]) + 1))
-        tokens_to_use = [self.placeholder_tokens[index % len(self.placeholder_tokens)][tkn_i] for tkn_i in tokens_ids_to_use]
+        # tokens_ids_to_use = random.sample(range(len(self.placeholder_tokens[index % len(self.placeholder_tokens)])), k=random.randrange(1, len(self.placeholder_tokens[index % len(self.placeholder_tokens)]) + 1))
+        # print(f'tokens_ids_to_use: {tokens_ids_to_use}')
+        # tokens_to_use = [self.placeholder_tokens[index % len(self.placeholder_tokens)][tkn_i] for tkn_i in tokens_ids_to_use]
+        # Get the placeholder tokens for the current index
+        current_tokens_list = self.placeholder_tokens[index % len(self.placeholder_tokens)]
+        # print(f'current_tokens_list: {current_tokens_list}')
+
+        # Determine the number of tokens to use
+        num_tokens_to_use = random.randrange(1, len(current_tokens_list) + 1)
+        # print(f'num_tokens_to_use: {num_tokens_to_use}')
+
+        # Randomly select the token IDs to use
+        tokens_ids_to_use = random.sample(range(len(current_tokens_list)), k=num_tokens_to_use)
+        # print(f'tokens_ids_to_use: {tokens_ids_to_use}')
+
+        # Retrieve the actual tokens using the selected indices
+        tokens_to_use = [current_tokens_list[tkn_id] for tkn_id in tokens_ids_to_use]
+        # print(f'tokens_to_use: {tokens_to_use}')
+        
         prompt = "a photo of with " + " and ".join(tokens_to_use)
 
+        ### TODO: This is a very temporary fix to make the code work. 
+        tokens_ids_to_use_global = []
+        # for tokens_id_to_use in tokens_ids_to_use:
+        #     tokens_ids_to_use_global.append(tokens_id_to_use + index % len(self.instances) * len(self.placeholder_tokens[0]))
+        for token_to_use in tokens_to_use:
+            tokens_ids_to_use_global.append(self.all_placeholder_tokens.index(token_to_use))
         example = {
             "instance_images": instance_image,
             "instance_masks": instance_masks[tokens_ids_to_use],
-            "token_ids": torch.tensor(tokens_ids_to_use),
+            "token_ids": torch.tensor(tokens_ids_to_use_global),
             "instance_prompt_ids": self.tokenizer(
                 prompt,
                 truncation=True,
@@ -123,10 +150,10 @@ class DreamBoothMultiDataset(Dataset):
             ).input_ids
 
         # Debug print for each item's size in the example
-        print(f"Example at index {index}:")
-        for key, value in example.items():
-            if isinstance(value, torch.Tensor):
-                print(f"  {key} size: {value.size()}")
-            else:
-                print(f"  {key} type: {type(value)}")
+        # print(f"Example at index {index}:")
+        # for key, value in example.items():
+        #     if isinstance(value, torch.Tensor):
+        #         print(f"  {key} size: {value.size()}")
+        #     else:
+        #         print(f"  {key} type: {type(value)}")
         return example

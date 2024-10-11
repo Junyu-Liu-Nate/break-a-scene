@@ -570,6 +570,14 @@ class DreamBoothDataset(Dataset):
                 return_tensors="pt",
             ).input_ids
 
+        # Debug print for each item's size in the example
+        print(f"Example at index {index}:")
+        for key, value in example.items():
+            if isinstance(value, torch.Tensor):
+                print(f"  {key} size: {value.size()}")
+            else:
+                print(f"  {key} type: {type(value)}")
+
         return example
 
 
@@ -1083,6 +1091,14 @@ class SpatialDreambooth:
             if self.args.train_text_encoder:
                 self.text_encoder.train()
             for step, batch in enumerate(train_dataloader):
+                print(f"step {step}, batch content sizes:")
+                for key, value in batch.items():
+                    if isinstance(value, torch.Tensor):
+                        print(f"  {key} size: {value.size()}")
+                    else:
+                        print(f"  {key} type: {type(value)}")
+                exit()
+
                 if self.args.phase1_train_steps == global_step:
                     # self.unet.requires_grad_(True)
                     self.unet.requires_grad_(False)
