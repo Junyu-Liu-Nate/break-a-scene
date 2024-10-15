@@ -556,6 +556,7 @@ class DreamBoothDataset(Dataset):
         ).input_ids
 
         if self.class_data_root:
+            print('Checking class data root')
             class_image = Image.open(
                 self.class_images_path[index % self.num_class_images]
             )
@@ -570,13 +571,13 @@ class DreamBoothDataset(Dataset):
                 return_tensors="pt",
             ).input_ids
 
-        # Debug print for each item's size in the example
-        print(f"Example at index {index}:")
-        for key, value in example.items():
-            if isinstance(value, torch.Tensor):
-                print(f"  {key} size: {value.size()}")
-            else:
-                print(f"  {key} type: {type(value)}")
+        # # Debug print for each item's size in the example
+        # print(f"Example at index {index}:")
+        # for key, value in example.items():
+        #     if isinstance(value, torch.Tensor):
+        #         print(f"  {key} size: {value.size()}")
+        #     else:
+        #         print(f"  {key} type: {type(value)}")
 
         return example
 
@@ -1091,13 +1092,12 @@ class SpatialDreambooth:
             if self.args.train_text_encoder:
                 self.text_encoder.train()
             for step, batch in enumerate(train_dataloader):
-                print(f"step {step}, batch content sizes:")
-                for key, value in batch.items():
-                    if isinstance(value, torch.Tensor):
-                        print(f"  {key} size: {value.size()}")
-                    else:
-                        print(f"  {key} type: {type(value)}")
-                exit()
+                # print(f"step {step}, batch content sizes:")
+                # for key, value in batch.items():
+                #     if isinstance(value, torch.Tensor):
+                #         print(f"  {key} size: {value.size()}")
+                #     else:
+                #         print(f"  {key} type: {type(value)}")
 
                 if self.args.phase1_train_steps == global_step:
                     # self.unet.requires_grad_(True)
@@ -1268,7 +1268,10 @@ class SpatialDreambooth:
                                 is_cross=True,
                                 select=batch_idx,
                             )
-                            curr_cond_batch_idx = self.args.train_batch_size + batch_idx
+                            if self.args.with_prior_preservation:
+                                curr_cond_batch_idx = self.args.train_batch_size + batch_idx
+                            else:
+                                curr_cond_batch_idx = batch_idx
                             
                             # print(f'curr_cond_batch_idx: {curr_cond_batch_idx}')
                             # print(f'len(GT_masks): {len(GT_masks)}')
@@ -1279,7 +1282,8 @@ class SpatialDreambooth:
                                     batch["token_ids"][batch_idx][mask_id]
                                 ]
 
-                                # print(f'    curr_placeholder_token_id: {curr_placeholder_token_id}')
+                                # print(f'    batch["input_ids"][curr_cond_batch_idx]: {batch["input_ids"][curr_cond_batch_idx]}')
+                                # print(f'    curr_placeholder_token_id: {curr_placeholder_token_id}\n')
                                 asset_idx = (
                                     (
                                         batch["input_ids"][curr_cond_batch_idx]

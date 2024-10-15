@@ -799,7 +799,10 @@ class SpatialDreambooth:
                                 is_cross=True,
                                 select=batch_idx,
                             )
-                            curr_cond_batch_idx = self.args.train_batch_size + batch_idx
+                            if self.args.with_prior_preservation:
+                                curr_cond_batch_idx = self.args.train_batch_size + batch_idx
+                            else:
+                                curr_cond_batch_idx = batch_idx
                             
                             # print(f'curr_cond_batch_idx: {curr_cond_batch_idx}')
                             # print(f'len(GT_masks): {len(GT_masks)}')

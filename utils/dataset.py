@@ -111,12 +111,10 @@ class DreamBoothMultiDataset(Dataset):
         tokens_to_use = [current_tokens_list[tkn_id] for tkn_id in tokens_ids_to_use]
         # print(f'tokens_to_use: {tokens_to_use}')
         
-        prompt = "a photo of with " + " and ".join(tokens_to_use)
+        prompt = "a photo of " + " and ".join(tokens_to_use)
 
-        ### TODO: This is a very temporary fix to make the code work. 
         tokens_ids_to_use_global = []
-        # for tokens_id_to_use in tokens_ids_to_use:
-        #     tokens_ids_to_use_global.append(tokens_id_to_use + index % len(self.instances) * len(self.placeholder_tokens[0]))
+        ### Here the ids are global ids in all placeholder tokens
         for token_to_use in tokens_to_use:
             tokens_ids_to_use_global.append(self.all_placeholder_tokens.index(token_to_use))
         example = {

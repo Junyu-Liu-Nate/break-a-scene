@@ -60,13 +60,14 @@ where `--instance_data_dir` is the path to the input folder, `--num_of_assets` i
 For example:
 ```bash
 python train.py \
-  --instance_data_dir examples/creature  \
-  --num_of_assets 3 \
-  --initializer_tokens creature bowl stone \
+  --instance_data_dir examples/chair  \
+  --num_of_assets 4 \
+  --initializer_tokens armrest backrest legs seat \
   --class_data_dir inputs/data_dir \
   --phase1_train_steps 400 \
   --phase2_train_steps 400 \
-  --output_dir outputs/creature
+  --output_dir outputs/chair_subject_prompt \
+  --no_prior_preservation
 ```
 For muliple images
 ```bash
@@ -78,6 +79,19 @@ python train_multi.py \
   --phase1_train_steps 400 \
   --phase2_train_steps 400 \
   --output_dir outputs/creature_toys
+  --no_prior_preservation \
+```
+
+```
+python train_multi.py \
+  --instance_data_dir examples/chair_two  \
+  --assets_indices_lists "0,1,2,3;4,5,6,7" \
+  --initializer_tokens_list "'armrest','backrest','legs', 'seat';'armrest','backrest','legs', 'seat'" \
+  --class_data_dir inputs/data_dir \
+  --phase1_train_steps 400 \
+  --phase2_train_steps 400 \
+  --output_dir outputs/chair_two \
+  --no_prior_preservation \
 ```
 
 ## Step 2 - Generating images

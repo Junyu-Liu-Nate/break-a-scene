@@ -17,5 +17,5 @@ def convert_npy_to_binary_image(folder_path):
             print(f"Converted {filename} to {output_filename}")
 
 # Specify the directory containing the .npy masks
-folder_path = './chair/'
+folder_path = './chair126/'
 convert_npy_to_binary_image(folder_path)

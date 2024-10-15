@@ -16,5 +16,5 @@ def resize_images_in_directory(directory, size=(512, 512)):
             print(f"Resized and saved: {filename}")
 
 # Specify the directory containing the images to resize
-directory = './chair/'
+directory = './chair126/'
 resize_images_in_directory(directory)
