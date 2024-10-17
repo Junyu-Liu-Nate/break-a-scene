@@ -64,10 +64,11 @@ python train.py \
   --num_of_assets 3 \
   --initializer_tokens creature bowl stone \
   --class_data_dir inputs/data_dir \
-  --phase1_train_steps 10 \
-  --phase2_train_steps 10 \
+  --phase1_train_steps 400 \
+  --phase2_train_steps 400 \
   --output_dir outputs/creature_debug \
-  --no_prior_preservation
+  --no_prior_preservation \
+  --log_checkpoints
 ```
 ```bash
 python train.py \
@@ -85,12 +86,16 @@ For muliple images
 python train_multi.py \
   --instance_data_dir examples/creature_toys  \
   --assets_indices_lists "0,1,2;3,4,5" \
-  --initializer_tokens_list "'creature','bowl','stone';'toy','toy','toy'" \
+  --initializer_tokens_list "'creature','bowl','stone';'toy','toy','football'" \
   --class_data_dir inputs/data_dir \
-  --phase1_train_steps 400 \
-  --phase2_train_steps 400 \
-  --output_dir outputs/creature_toys
+  --phase1_train_steps 800 \
+  --phase2_train_steps 800 \
+  --output_dir outputs/creature_toys \
   --no_prior_preservation \
+  --log_checkpoints \
+  --img_log_steps 200 \
+  --report_to "wandb" \
+  --wandb_run_name "creature_toys"
 ```
 
 ```

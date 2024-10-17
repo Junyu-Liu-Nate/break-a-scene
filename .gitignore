@@ -171,3 +171,5 @@ tags
 # Project
 outputs/
 inputs/
+
+data_process/chair/

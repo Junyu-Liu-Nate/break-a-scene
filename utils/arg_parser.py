@@ -285,6 +285,12 @@ def parse_args(input_args=None):
         ),
     )
     parser.add_argument(
+        "--wandb_run_name",
+        type=str,
+        default="",
+        help="The wandb run name to use for logging.",
+    )
+    parser.add_argument(
         "--mixed_precision",
         type=str,
         default="fp16",
