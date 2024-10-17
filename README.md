@@ -58,6 +58,17 @@ python train.py \
 where `--instance_data_dir` is the path to the input folder, `--num_of_assets` is the number of concepts to extract, `--initializer_tokens` is an optional list of words describing the concepts (it can be omitted, but the model may produce better results with a proper initialization), `--class_data_dir` is a path that contains general images for the prior preservation loss (if you do not have such a folder, the script will generate them for you, can be used for future executions), `--phase1_train_steps` and `--phase1_train_steps` are the number of training steps per phase, and `--output_dir` is the path to save the trained model.
 
 For example:
+```
+python train.py \
+  --instance_data_dir examples/creature  \
+  --num_of_assets 3 \
+  --initializer_tokens creature bowl stone \
+  --class_data_dir inputs/data_dir \
+  --phase1_train_steps 10 \
+  --phase2_train_steps 10 \
+  --output_dir outputs/creature_debug \
+  --no_prior_preservation
+```
 ```bash
 python train.py \
   --instance_data_dir examples/chair  \

@@ -28,6 +28,8 @@ import warnings
 from pathlib import Path
 from typing import List, Optional
 import random
+import wandb
+from datetime import datetime
 
 import torch
 import torch.nn.functional as F
@@ -537,7 +539,7 @@ class DreamBoothDataset(Dataset):
             range(len(self.placeholder_tokens)), k=num_of_tokens
         )
         tokens_to_use = [self.placeholder_tokens[tkn_i] for tkn_i in tokens_ids_to_use]
-        prompt = "a photo of a chair with " + " and ".join(tokens_to_use)
+        prompt = "a photo of " + " and ".join(tokens_to_use)
 
         example["instance_images"] = self.instance_image
         example["instance_masks"] = self.instance_masks[tokens_ids_to_use]
@@ -644,6 +646,11 @@ class SpatialDreambooth:
 
     def main(self):
         logging_dir = Path(self.args.output_dir, self.args.logging_dir)
+
+        # Initialize wandb
+        now = datetime.now()
+        date_time_string = now.strftime("%Y-%m-%d-%H-%M")
+        wandb.init(project='break-a-scene', entity='ljunyu', name='test' + '_' + date_time_string, config=self.args)
 
         self.accelerator = Accelerator(
             gradient_accumulation_steps=self.args.gradient_accumulation_steps,
@@ -1165,7 +1172,8 @@ class SpatialDreambooth:
                     if step % self.args.gradient_accumulation_steps == 0:
                         progress_bar.update(1)
                     continue
-
+                
+                wandb_log = {}
                 with self.accelerator.accumulate(self.unet):
                     # Convert images to latent space
                     latents = self.vae.encode(
@@ -1211,6 +1219,7 @@ class SpatialDreambooth:
                             f"Unknown prediction type {self.noise_scheduler.config.prediction_type}"
                         )
 
+                    loss = 0
                     # print(f'with_prior_preservation: {self.args.with_prior_preservation}')
                     if self.args.with_prior_preservation:
                         # Chunk the noise and model_pred into two parts and compute the loss on each part separately.
@@ -1251,9 +1260,15 @@ class SpatialDreambooth:
                             )
                             model_pred = model_pred * downsampled_mask
                             target = target * downsampled_mask
-                        loss = F.mse_loss(
+                        # loss = F.mse_loss(
+                        #     model_pred.float(), target.float(), reduction="mean"
+                        # )
+                        mask_diffusion_loss = F.mse_loss(
                             model_pred.float(), target.float(), reduction="mean"
                         )
+                        loss += mask_diffusion_loss
+                        wandb_log['masked_diffusion_loss'] = mask_diffusion_loss.item()
+
 
                     # Attention loss
                     if self.args.lambda_attention != 0:
@@ -1307,8 +1322,10 @@ class SpatialDreambooth:
                         attn_loss = self.args.lambda_attention * (
                             attn_loss / self.args.train_batch_size
                         )
+                        wandb_log['attn_loss'] = attn_loss.item()
                         logs["attn_loss"] = attn_loss.detach().item()
                         loss += attn_loss
+                    wandb.log(wandb_log)
 
                     self.accelerator.backward(loss)
 
@@ -1425,7 +1442,8 @@ class SpatialDreambooth:
                 if global_step >= self.args.max_train_steps:
                     break
 
-        self.save_pipeline(self.args.output_dir)
+        # self.save_pipeline(self.args.output_dir)
+        self.save_pipeline_lora(self.args.output_dir)
 
         self.accelerator.end_training()
 
@@ -1441,13 +1459,49 @@ class SpatialDreambooth:
             )
             pipeline.save_pretrained(path)
 
-    # def save_pipeline(self, path):
-    #     self.accelerator.wait_for_everyone()
-    #     if self.accelerator.is_main_process:
-    #         lora_weights = {name: param for name, param in self.pipeline.unet.named_parameters() if 'lora' in name}
-    #         lora_weights_path = os.path.join(path, 'lora_weights.pth')
-    #         torch.save(lora_weights, lora_weights_path)
-    #         logger.info(f"Saved LoRA parameters to {lora_weights_path}")
+    def reset_attention_processors(self):
+        # Re-initialize the attention processors to standard LoRACrossAttnProcessor
+        lora_attn_procs = {}
+        for name in self.unet.attn_processors.keys():
+            cross_attention_dim = None if name.endswith("attn1.processor") else self.unet.config.cross_attention_dim
+            if name.startswith("mid_block"):
+                hidden_size = self.unet.config.block_out_channels[-1]
+            elif name.startswith("up_blocks"):
+                block_id = int(name[len("up_blocks.")])
+                hidden_size = list(reversed(self.unet.config.block_out_channels))[block_id]
+            elif name.startswith("down_blocks"):
+                block_id = int(name[len("down_blocks.")])
+                hidden_size = self.unet.config.block_out_channels[block_id]
+            else:
+                continue
+            lora_attn_procs[name] = LoRACrossAttnProcessor(
+                hidden_size=hidden_size, cross_attention_dim=cross_attention_dim, rank=4
+            )
+        self.unet.set_attn_processor(lora_attn_procs)
+
+    def save_pipeline_lora(self, path):
+        '''
+        Save the pipeline with LoRA parameters.
+        '''
+        self.accelerator.wait_for_everyone()
+        if self.accelerator.is_main_process:
+            # Reset attention processors to standard LoRACrossAttnProcessor
+            self.reset_attention_processors()
+
+            unet = self.accelerator.unwrap_model(self.unet)
+            unet.to(torch.float32)  # Ensure weights are in float32 precision
+            unet.save_attn_procs(path)
+            logger.info(f"Saved LoRA parameters to {path}")
+
+            # Save the text_encoder
+            text_encoder = self.accelerator.unwrap_model(self.text_encoder)
+            text_encoder.to(torch.float32)
+            text_encoder.save_pretrained(path)
+            logger.info(f"Saved text_encoder to {path}")
+
+            # Save the tokenizer
+            self.tokenizer.save_pretrained(path)
+            logger.info(f"Saved tokenizer to {path}")
 
     def register_attention_control(self, controller):
         attn_procs = {}
