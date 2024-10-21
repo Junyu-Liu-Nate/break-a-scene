@@ -30,6 +30,11 @@ def parse_args(input_args=None):
         ),
     )
     parser.add_argument(
+        "--cross_img_sample",
+        action="store_true",
+        help="Whether to perform cross-image sampling.",
+    )
+    parser.add_argument(
         "--tokenizer_name",
         type=str,
         default=None,

@@ -66,7 +66,7 @@ from diffusers.models.cross_attention import CrossAttention
 from diffusers.loaders import AttnProcsLayers
 from diffusers.models.cross_attention import LoRACrossAttnProcessor
 
-from utils.dataset import DreamBoothMultiDataset
+from utils.dataset import DreamBoothMultiDataset, DreamBoothSynthDataset
 from utils.arg_parser import parse_args
 
 check_min_version("0.12.0")
@@ -358,7 +358,7 @@ class SpatialDreambooth:
         self.text_encoder.resize_token_embeddings(len(self.tokenizer))
         self.args.instance_prompt = "a photo of " + " and ".join(
             self.all_placeholder_tokens
-        )
+        ) ###TODO: May need to modify here to perform proper inference
         print(f"Instance prompt: {self.args.instance_prompt}")
         # exit()
 
@@ -449,17 +449,32 @@ class SpatialDreambooth:
         )
 
         # Dataset and DataLoaders creation:
-        train_dataset = DreamBoothMultiDataset(
-            instance_data_root=self.args.instance_data_dir,
-            placeholder_tokens=self.placeholder_tokens,
-            class_data_root=self.args.class_data_dir
-            if self.args.with_prior_preservation
-            else None,
-            class_prompt=self.args.class_prompt,
-            tokenizer=self.tokenizer,
-            size=self.args.resolution,
-            center_crop=self.args.center_crop
-        )
+        if not self.args.cross_img_sample:
+            ### Original sampling scheme - sample tokens in each training img
+            train_dataset = DreamBoothMultiDataset(
+                instance_data_root=self.args.instance_data_dir,
+                placeholder_tokens=self.placeholder_tokens,
+                class_data_root=self.args.class_data_dir
+                if self.args.with_prior_preservation
+                else None,
+                class_prompt=self.args.class_prompt,
+                tokenizer=self.tokenizer,
+                size=self.args.resolution,
+                center_crop=self.args.center_crop
+            )
+        else:
+            ### Sample tokens across all imgs - need to synthesize gt images
+            train_dataset = DreamBoothSynthDataset(
+                instance_data_root=self.args.instance_data_dir,
+                placeholder_tokens=self.placeholder_tokens,
+                class_data_root=self.args.class_data_dir
+                if self.args.with_prior_preservation
+                else None,
+                class_prompt=self.args.class_prompt,
+                tokenizer=self.tokenizer,
+                size=self.args.resolution,
+                center_crop=self.args.center_crop
+            )
         
         train_dataloader = torch.utils.data.DataLoader(
             train_dataset,

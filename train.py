@@ -369,6 +369,12 @@ def parse_args(input_args=None):
         ),
     )
     parser.add_argument(
+        "--wandb_run_name",
+        type=str,
+        default="",
+        help="The wandb run name to use for logging.",
+    )
+    parser.add_argument(
         "--mixed_precision",
         type=str,
         default="fp16",
@@ -539,7 +545,7 @@ class DreamBoothDataset(Dataset):
             range(len(self.placeholder_tokens)), k=num_of_tokens
         )
         tokens_to_use = [self.placeholder_tokens[tkn_i] for tkn_i in tokens_ids_to_use]
-        prompt = "a photo of " + " and ".join(tokens_to_use)
+        prompt = "a photo of a chair with " + " and ".join(tokens_to_use)
 
         example["instance_images"] = self.instance_image
         example["instance_masks"] = self.instance_masks[tokens_ids_to_use]
@@ -645,12 +651,12 @@ class SpatialDreambooth:
         self.main()
 
     def main(self):
-        logging_dir = Path(self.args.output_dir, self.args.logging_dir)
-
-        # Initialize wandb
+        ### Get the training start time
         now = datetime.now()
         date_time_string = now.strftime("%Y-%m-%d-%H-%M")
-        wandb.init(project='break-a-scene', entity='ljunyu', name='test' + '_' + date_time_string, config=self.args)
+        self.args.output_dir = self.args.output_dir + '_' + date_time_string
+
+        logging_dir = Path(self.args.output_dir, self.args.logging_dir)
 
         self.accelerator = Accelerator(
             gradient_accumulation_steps=self.args.gradient_accumulation_steps,
@@ -1022,8 +1028,16 @@ class SpatialDreambooth:
 
         # We need to initialize the trackers we use, and also store our configuration.
         # The trackers initializes automatically on the main process.
+        # if self.accelerator.is_main_process:
+        #     self.accelerator.init_trackers("dreambooth", config=vars(self.args))
         if self.accelerator.is_main_process:
-            self.accelerator.init_trackers("dreambooth", config=vars(self.args))
+            init_kwargs = {}
+            if self.args.report_to == "wandb":
+                init_kwargs["wandb"] = {
+                    "name": self.args.wandb_run_name + '_' + date_time_string
+                }
+
+            self.accelerator.init_trackers('break-a-scene', config=vars(self.args), init_kwargs=init_kwargs)
 
         # Train
         total_batch_size = (
@@ -1392,7 +1406,8 @@ class SpatialDreambooth:
                             self.args.output_dir, "checkpoints", f"{global_step:05}"
                         )
                         os.makedirs(ckpts_path, exist_ok=True)
-                        self.save_pipeline(ckpts_path)
+                        # self.save_pipeline(ckpts_path)
+                        self.save_pipeline_lora(ckpts_path)
 
                         img_logs_path = os.path.join(self.args.output_dir, "img_logs")
                         os.makedirs(img_logs_path, exist_ok=True)
@@ -1459,37 +1474,88 @@ class SpatialDreambooth:
             )
             pipeline.save_pretrained(path)
 
-    def reset_attention_processors(self):
+    # def reset_attention_processors(self):
+    #     # Re-initialize the attention processors to standard LoRACrossAttnProcessor
+    #     lora_attn_procs = {}
+    #     for name in self.unet.attn_processors.keys():
+    #         cross_attention_dim = None if name.endswith("attn1.processor") else self.unet.config.cross_attention_dim
+    #         if name.startswith("mid_block"):
+    #             hidden_size = self.unet.config.block_out_channels[-1]
+    #         elif name.startswith("up_blocks"):
+    #             block_id = int(name[len("up_blocks.")])
+    #             hidden_size = list(reversed(self.unet.config.block_out_channels))[block_id]
+    #         elif name.startswith("down_blocks"):
+    #             block_id = int(name[len("down_blocks.")])
+    #             hidden_size = self.unet.config.block_out_channels[block_id]
+    #         else:
+    #             continue
+    #         lora_attn_procs[name] = LoRACrossAttnProcessor(
+    #             hidden_size=hidden_size, cross_attention_dim=cross_attention_dim, rank=4
+    #         )
+    #     self.unet.set_attn_processor(lora_attn_procs)
+
+    def reset_attention_processors(self, unet):
         # Re-initialize the attention processors to standard LoRACrossAttnProcessor
         lora_attn_procs = {}
-        for name in self.unet.attn_processors.keys():
-            cross_attention_dim = None if name.endswith("attn1.processor") else self.unet.config.cross_attention_dim
+        for name in unet.attn_processors.keys():
+            cross_attention_dim = None if name.endswith("attn1.processor") else unet.config.cross_attention_dim
             if name.startswith("mid_block"):
-                hidden_size = self.unet.config.block_out_channels[-1]
+                hidden_size = unet.config.block_out_channels[-1]
             elif name.startswith("up_blocks"):
                 block_id = int(name[len("up_blocks.")])
-                hidden_size = list(reversed(self.unet.config.block_out_channels))[block_id]
+                hidden_size = list(reversed(unet.config.block_out_channels))[block_id]
             elif name.startswith("down_blocks"):
                 block_id = int(name[len("down_blocks.")])
-                hidden_size = self.unet.config.block_out_channels[block_id]
+                hidden_size = unet.config.block_out_channels[block_id]
             else:
                 continue
             lora_attn_procs[name] = LoRACrossAttnProcessor(
                 hidden_size=hidden_size, cross_attention_dim=cross_attention_dim, rank=4
             )
-        self.unet.set_attn_processor(lora_attn_procs)
+        unet.set_attn_processor(lora_attn_procs)
+
+    # def save_pipeline_lora(self, path):
+    #     '''
+    #     Save the pipeline with LoRA parameters.
+    #     '''
+    #     self.accelerator.wait_for_everyone()
+    #     if self.accelerator.is_main_process:
+    #         # Reset attention processors to standard LoRACrossAttnProcessor
+    #         self.reset_attention_processors()
+
+    #         unet = self.accelerator.unwrap_model(self.unet)
+    #         unet.to(torch.float32)  # Ensure weights are in float32 precision
+    #         unet.save_attn_procs(path)
+    #         logger.info(f"Saved LoRA parameters to {path}")
+
+    #         # Save the text_encoder
+    #         text_encoder = self.accelerator.unwrap_model(self.text_encoder)
+    #         text_encoder.to(torch.float32)
+    #         text_encoder.save_pretrained(path)
+    #         logger.info(f"Saved text_encoder to {path}")
+
+    #         # Save the tokenizer
+    #         self.tokenizer.save_pretrained(path)
+    #         logger.info(f"Saved tokenizer to {path}")
 
     def save_pipeline_lora(self, path):
         '''
-        Save the pipeline with LoRA parameters.
+        Save the LoRA weights, the text_encoder, and the tokenizer without affecting training.
         '''
         self.accelerator.wait_for_everyone()
         if self.accelerator.is_main_process:
-            # Reset attention processors to standard LoRACrossAttnProcessor
-            self.reset_attention_processors()
+            # Backup the original attention processors and device
+            original_attn_processors = self.unet.attn_processors
+            original_device = next(self.unet.parameters()).device
 
+            # Reset attention processors to standard LoRACrossAttnProcessor
+            self.reset_attention_processors(self.unet)
+            # Move unet to CPU for saving
+            self.unet.to('cpu')
+            self.unet.to(torch.float32)
+
+            # Save the LoRA weights
             unet = self.accelerator.unwrap_model(self.unet)
-            unet.to(torch.float32)  # Ensure weights are in float32 precision
             unet.save_attn_procs(path)
             logger.info(f"Saved LoRA parameters to {path}")
 
@@ -1502,6 +1568,10 @@ class SpatialDreambooth:
             # Save the tokenizer
             self.tokenizer.save_pretrained(path)
             logger.info(f"Saved tokenizer to {path}")
+
+            # Restore the original attention processors and move unet back to original device
+            self.unet.set_attn_processor(original_attn_processors)
+            self.unet.to(original_device)
 
     def register_attention_control(self, controller):
         attn_procs = {}

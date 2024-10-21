@@ -72,14 +72,18 @@ python train.py \
 ```
 ```bash
 python train.py \
-  --instance_data_dir examples/chair  \
+  --instance_data_dir examples/chair299  \
   --num_of_assets 4 \
   --initializer_tokens armrest backrest legs seat \
   --class_data_dir inputs/data_dir \
-  --phase1_train_steps 400 \
-  --phase2_train_steps 400 \
-  --output_dir outputs/chair_subject_prompt \
-  --no_prior_preservation
+  --phase1_train_steps 2400 \
+  --phase2_train_steps 2400 \
+  --output_dir outputs/chair299 \
+  --no_prior_preservation \
+  --log_checkpoints \
+  --img_log_steps 400 \
+  --report_to "wandb" \
+  --wandb_run_name "chair299"
 ```
 For muliple images
 ```bash

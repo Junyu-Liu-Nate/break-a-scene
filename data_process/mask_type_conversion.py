@@ -24,9 +24,11 @@ def convert_npy_to_binary_image(folder_path):
         # List all files in the given folder
         for filename in os.listdir(part_folder):
             if filename.endswith(".npy"):
-                # Load the mask from the .npy file
-                mask_info = np.load(os.path.join(part_folder, filename), allow_pickle=True).item()
-                mask = mask_info['segmentation']
+                print(f"Converting {filename} to binary image...")
+                # # Load the mask from the .npy file
+                # mask_info = np.load(os.path.join(part_folder, filename), allow_pickle=True).item()
+                # mask = mask_info['segmentation']
+                mask = np.load(os.path.join(part_folder, filename))
                 # Convert the mask to a binary image
                 binary_image = np.where(mask > 0.5, 255, 0).astype(np.uint8)
                 # Form the output image filename
@@ -36,5 +38,5 @@ def convert_npy_to_binary_image(folder_path):
                 print(f"Converted {filename} to {output_filename}")
 
 # Specify the directory containing the .npy masks
-folder_path = './chair/image9/'
+folder_path = './chair/image299/'
 convert_npy_to_binary_image(folder_path)
